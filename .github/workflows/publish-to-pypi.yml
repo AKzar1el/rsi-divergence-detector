@@ -14,7 +14,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     environment:
-      name: pypi # The environment name you used in the PyPI form
+      name: testpypi # The environment name you used in the PyPI form
       url: https://pypi.org/p/rsi-divergence-detector # Optional: link to your package
 
     steps:
