@@ -1,43 +1,59 @@
-"""Command-line interface for the RSI divergence detector."""
-
 import typer
 import pandas as pd
-from .core import find_divergences
+from .core import calculate_rsi, find_divergences
 
 app = typer.Typer()
 
 @app.command()
 def main(
-    file: str = typer.Option(..., "--file", "-f", help="Path to the OHLC data file (CSV)."),
+    file: str = typer.Option(..., "--file", "-f", help="Path to OHLC CSV with a 'close' column."),
     rsi_period: int = typer.Option(14, help="RSI lookback period."),
-    price_prominence: int = typer.Option(1, help="Price peak prominence."),
-    rsi_prominence: int = typer.Option(1, help="RSI peak prominence."),
-    price_width: int = typer.Option(1, help="Price peak width."),
-    rsi_width: int = typer.Option(1, help="RSI peak width."),
+    # If any of the next params are omitted, adaptive defaults are used.
+    price_prominence: float | None = typer.Option(None, help="Price peak prominence (auto if omitted)."),
+    rsi_prominence: float | None = typer.Option(None, help="RSI peak prominence (auto if omitted)."),
+    price_width: int | None = typer.Option(None, help="Price peak min width in samples (auto if omitted)."),
+    rsi_width: int | None = typer.Option(None, help="RSI peak min width in samples (auto if omitted)."),
+    distance: int | None = typer.Option(None, help="Min distance between peaks (samples, auto if omitted)."),
+    max_lag: int = typer.Option(3, help="Max bars between paired price/RSI pivots."),
+    include_hidden: bool = typer.Option(True, help="Detect hidden divergences."),
 ):
-    """Detect RSI divergences from an OHLC data file."""
+    """Detect RSI divergences from an OHLC CSV."""
     try:
-        ohlc = pd.read_csv(file, index_col=0, parse_dates=True)
+        df = pd.read_csv(file, index_col=0, parse_dates=True)
     except FileNotFoundError:
-        print(f"Error: File not found at {file}")
+        typer.echo(f"Error: File not found at {file}")
         raise typer.Exit(code=1)
     except Exception as e:
-        print(f"Error reading file: {e}")
+        typer.echo(f"Error reading file: {e}")
         raise typer.Exit(code=1)
 
-    divergences = find_divergences(
-        ohlc,
+    if "close" in df.columns:
+        price = df["close"]
+    else:
+        num = df.select_dtypes("number")
+        if num.empty:
+            typer.echo("CSV must contain a numeric 'close' column.")
+            raise typer.Exit(code=2)
+        price = num.iloc[:, 0]
+
+    rsi = calculate_rsi(price, period=rsi_period)
+    divs = find_divergences(
+        price,
+        rsi,
         rsi_period=rsi_period,
         price_prominence=price_prominence,
         rsi_prominence=rsi_prominence,
         price_width=price_width,
         rsi_width=rsi_width,
+        distance=distance,
+        max_lag=max_lag,
+        include_hidden=include_hidden,
     )
 
-    if divergences.empty:
-        print("No divergences found.")
+    if divs.empty:
+        typer.echo("No divergences found.")
     else:
-        print(divergences)
+        typer.echo(divs.to_string(index=False))
 
 if __name__ == "__main__":
     app()

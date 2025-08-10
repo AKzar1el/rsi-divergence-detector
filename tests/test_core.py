@@ -6,7 +6,7 @@ import pytest
 
 import os
 import matplotlib.pyplot as plt
-from rsi_divergence.core import calculate_rsi, find_divergences, find_extrema
+from rsi_divergence.core import calculate_rsi, find_divergences
 
 
 def test_no_divergence():
