@@ -1,7 +1,7 @@
 """Utility functions for the RSI divergence detector."""
 
 import numpy as np
-from scipy.signal import find_peaks
+
 def wilder_rsi(prices: np.ndarray, period: int = 14) -> np.ndarray:
     """Calculate RSI using Wilder's smoothing.
 
@@ -38,19 +38,5 @@ def wilder_rsi(prices: np.ndarray, period: int = 14) -> np.ndarray:
 
     return rsi
 
-def find_extrema(series: np.ndarray, prominence: int = 1, width: int = 1) -> tuple[np.ndarray, np.ndarray]:
-    """Find local minima and maxima in a series.
 
-    Args:
-        series: The data series.
-        prominence: The prominence of the peaks.
-        width: The width of the peaks.
-
-    Returns:
-        A tuple containing arrays of indices for minima and maxima.
-    """
-    maxima_indices, _ = find_peaks(series, prominence=prominence, width=width)
-    minima_indices, _ = find_peaks(-series, prominence=prominence, width=width)
-
-    return minima_indices, maxima_indices
 

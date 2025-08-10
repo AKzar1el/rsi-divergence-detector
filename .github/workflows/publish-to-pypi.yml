@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: testpypi # The environment name you used in the PyPI form
-      url: https://pypi.org/p/rsi-divergence-detector # Optional: link to your package
+      url: https://test.pypi.org/p/rsi-divergence-detector # Optional: link to your package
 
     steps:
     - uses: actions/checkout@v4
