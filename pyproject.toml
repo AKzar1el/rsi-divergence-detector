@@ -1,26 +1,26 @@
 [tool.poetry]
-name = "rsi-divergence"
+name = "rsi-divergence-detector"
 version = "0.1.0"
-description = "A complete, industry-grade RSI divergence detector."
-authors = ["Your Name <you@example.com>"]
-license = "MIT"
-readme = "README.md"
+description = "A tool to detect RSI divergences in price data."
+authors = ["Tomi"]
+
+packages = [{include = "rsi_divergence"}]
 
 [tool.poetry.dependencies]
-python = ">=3.8"
-numpy = "^1.23.5"
-pandas = "^1.5.2"
-scipy = "^1.10.0"
-numba = "^0.56.4"
-typer = {extras = ["all"], version = "^0.7.0"}
+python = ">=3.9,<3.12"
+pandas = "^2.0.0"
+numpy = "^1.23.0"
+scipy = "^1.11.0"
+typer = {extras = ["all"], version = "^0.9.0"}
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^7.2.0"
-hypothesis = "^6.58.0"
-mypy = "^0.991"
-black = "^22.12.0"
-flake8 = "^6.0.0"
-sphinx = "^5.3.0"
+matplotlib = "^3.7.0"
+pytest = "^7.4.0"
+hypothesis = "^6.88.0"
+mypy = "^1.5.0"
+black = "^23.9.0"
+flake8 = "^6.1.0"
+sphinx = "^7.2.0"
 
 [tool.poetry.scripts]
 rsi_divergence = "rsi_divergence.cli:app"

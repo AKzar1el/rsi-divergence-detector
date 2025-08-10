@@ -1,82 +1,67 @@
 """Core logic for RSI divergence detection."""
 
-import pandas as pd
+from typing import List, Tuple
+
 import numpy as np
-from .utils import wilder_rsi, find_extrema
+import pandas as pd
+from scipy.signal import argrelextrema
+
+
+def calculate_rsi(prices: pd.Series, period: int = 14) -> pd.Series:
+    """Calculates the Relative Strength Index (RSI)."""
+    delta = prices.diff()
+    gain = delta.where(delta > 0, 0.0)
+    loss = -delta.where(delta < 0, 0.0)
+
+    # Use Exponential Moving Average for RSI calculation
+    avg_gain = gain.ewm(com=period - 1, min_periods=period).mean()
+    avg_loss = loss.ewm(com=period - 1, min_periods=period).mean()
+
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+    # Fill initial NaNs with a neutral RSI value of 50
+    return rsi.fillna(50)
+
+
+def find_extrema(data: pd.Series, order: int) -> Tuple[np.ndarray, np.ndarray]:
+    """Finds local minima and maxima in a series."""
+    minima = argrelextrema(data.values, np.less_equal, order=order)[0]
+    maxima = argrelextrema(data.values, np.greater_equal, order=order)[0]
+    return minima, maxima
+
 
 def find_divergences(
-    ohlc: pd.DataFrame,
-    rsi_period: int = 14,
-    price_prominence: int = 1,
-    rsi_prominence: int = 1,
-    price_width: int = 1,
-    rsi_width: int = 1,
-) -> pd.DataFrame:
-    """
-    Finds regular and hidden RSI divergences.
-
-    Args:
-        ohlc: DataFrame with a 'close' column and a DatetimeIndex.
-        rsi_period: Lookback period for RSI.
-        price_prominence: Prominence for price peak detection.
-        rsi_prominence: Prominence for RSI peak detection.
-        price_width: Width for price peak detection.
-        rsi_width: Width for RSI peak detection.
-
-    Returns:
-        A DataFrame containing detected divergences.
-    """
-    close_prices = ohlc['close'].to_numpy()
-    rsi_values = wilder_rsi(close_prices, period=rsi_period)
-    ohlc['rsi'] = rsi_values
-
-    price_minima, price_maxima = find_extrema(close_prices, prominence=price_prominence, width=price_width)
-    rsi_minima, rsi_maxima = find_extrema(rsi_values, prominence=rsi_prominence, width=rsi_width)
-
+    prices: pd.Series, rsi: pd.Series, order: int = 5
+) -> List[Tuple[list, str, list]]:
+    """Finds RSI divergences and returns pairs of points for each."""
     divergences = []
+    price_minima_idx, price_maxima_idx = find_extrema(prices, order)
+    rsi_minima_idx, rsi_maxima_idx = find_extrema(rsi, order)
 
-    # Align extrema - this is a simplification. A more robust solution would search for the nearest corresponding extremum.
-    aligned_maxima = np.intersect1d(price_maxima, rsi_maxima)
-    aligned_minima = np.intersect1d(price_minima, rsi_minima)
+    # Regular Bullish: lower low in price, higher low in RSI
+    min_pairs = np.intersect1d(price_minima_idx, rsi_minima_idx)
+    for i in range(len(min_pairs) - 1):
+        p_low1_idx, p_low2_idx = min_pairs[i], min_pairs[i+1]
+        if prices.iloc[p_low2_idx] < prices.iloc[p_low1_idx] and rsi.iloc[p_low2_idx] > rsi.iloc[p_low1_idx]:
+            price_point1 = (prices.index[p_low1_idx], prices.iloc[p_low1_idx])
+            price_point2 = (prices.index[p_low2_idx], prices.iloc[p_low2_idx])
+            rsi_point1 = (rsi.index[p_low1_idx], rsi.iloc[p_low1_idx])
+            rsi_point2 = (rsi.index[p_low2_idx], rsi.iloc[p_low2_idx])
+            divergences.append(
+                ([price_point1, price_point2], "regular_bullish", [rsi_point1, rsi_point2])
+            )
 
-    # Regular Bullish: Price Lower Lows, RSI Higher Lows
-    for i in range(len(aligned_minima) - 1):
-        start_idx, end_idx = aligned_minima[i], aligned_minima[i+1]
-        if close_prices[end_idx] < close_prices[start_idx] and rsi_values[end_idx] > rsi_values[start_idx]:
-            divergences.append({
-                'type': 'Regular Bullish',
-                'start_date': ohlc.index[start_idx],
-                'end_date': ohlc.index[end_idx],
-            })
+    # Regular Bearish: higher high in price, lower high in RSI
+    max_pairs = np.intersect1d(price_maxima_idx, rsi_maxima_idx)
+    for i in range(len(max_pairs) - 1):
+        p_high1_idx, p_high2_idx = max_pairs[i], max_pairs[i+1]
+        if prices.iloc[p_high2_idx] > prices.iloc[p_high1_idx] and rsi.iloc[p_high2_idx] < rsi.iloc[p_high1_idx]:
+            price_point1 = (prices.index[p_high1_idx], prices.iloc[p_high1_idx])
+            price_point2 = (prices.index[p_high2_idx], prices.iloc[p_high2_idx])
+            rsi_point1 = (rsi.index[p_high1_idx], rsi.iloc[p_high1_idx])
+            rsi_point2 = (rsi.index[p_high2_idx], rsi.iloc[p_high2_idx])
+            divergences.append(
+                ([price_point1, price_point2], "regular_bearish", [rsi_point1, rsi_point2])
+            )
 
-    # Hidden Bullish: Price Higher Lows, RSI Lower Lows
-    for i in range(len(aligned_minima) - 1):
-        start_idx, end_idx = aligned_minima[i], aligned_minima[i+1]
-        if close_prices[end_idx] > close_prices[start_idx] and rsi_values[end_idx] < rsi_values[start_idx]:
-            divergences.append({
-                'type': 'Hidden Bullish',
-                'start_date': ohlc.index[start_idx],
-                'end_date': ohlc.index[end_idx],
-            })
-
-    # Regular Bearish: Price Higher Highs, RSI Lower Highs
-    for i in range(len(aligned_maxima) - 1):
-        start_idx, end_idx = aligned_maxima[i], aligned_maxima[i+1]
-        if close_prices[end_idx] > close_prices[start_idx] and rsi_values[end_idx] < rsi_values[start_idx]:
-            divergences.append({
-                'type': 'Regular Bearish',
-                'start_date': ohlc.index[start_idx],
-                'end_date': ohlc.index[end_idx],
-            })
-
-    # Hidden Bearish: Price Lower Highs, RSI Higher Highs
-    for i in range(len(aligned_maxima) - 1):
-        start_idx, end_idx = aligned_maxima[i], aligned_maxima[i+1]
-        if close_prices[end_idx] < close_prices[start_idx] and rsi_values[end_idx] > rsi_values[start_idx]:
-            divergences.append({
-                'type': 'Hidden Bearish',
-                'start_date': ohlc.index[start_idx],
-                'end_date': ohlc.index[end_idx],
-            })
-
-    return pd.DataFrame(divergences)
+    return divergences

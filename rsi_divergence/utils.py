@@ -1,10 +1,7 @@
 """Utility functions for the RSI divergence detector."""
 
 import numpy as np
-from numba import njit
 from scipy.signal import find_peaks
-
-@njit
 def wilder_rsi(prices: np.ndarray, period: int = 14) -> np.ndarray:
     """Calculate RSI using Wilder's smoothing.
 
