@@ -81,6 +81,76 @@ def test_regular_bullish_min_example():
     kinds = set(divs["kind"]) if not divs.empty else set()
     assert "regular_bullish" in kinds, f"No regular_bullish found; divs=\n{divs}"
 
+def test_regular_bullish_min_clear():
+    """
+    Deterministic, unambiguous regular-bullish divergence:
+    - Price prints LL at idx 19 vs idx 8
+    - RSI prints HL at idx 19 vs idx 8 (RSI is supplied explicitly)
+    Pairing window is set from observed deltas so alignment cannot fail.
+    """
+    # ----- PRICE: two clear valleys, second is LOWER (LL) -----
+    price_vals = [
+        100.0, 98.0, 96.0, 94.0, 92.0, 91.0, 90.5, 90.2, 90.0,   # idx 8  (V1)
+        91.5, 93.5, 95.5, 96.5, 95.0, 94.0, 93.0, 92.0, 90.5,
+        89.5, 88.0,                                             # idx 19 (V2, lower than V1)
+        90.0, 92.0, 95.0, 97.0, 99.0
+    ]
+    price = _series(price_vals, "close")
+
+    # ----- RSI: two valleys at the SAME bars, second is HIGHER (HL) -----
+    # Build a flat RSI and shape clear local minima at 8 and 19.
+    base = 55.0
+    rsi_vals = [base] * len(price_vals)
+    # valley #1 (lower RSI low)
+    rsi_vals[7]  = base - 10   # 45
+    rsi_vals[8]  = base - 25   # 30  <- r1 (min)
+    rsi_vals[9]  = base - 11   # 44
+    # valley #2 (higher RSI low)
+    rsi_vals[18] = base - 14   # 41
+    rsi_vals[19] = base - 19   # 36  <- r2 (min, HIGHER than r1)
+    rsi_vals[20] = base - 12   # 43
+    rsi = _series(rsi_vals, "rsi")
+
+    # Gates — modest but strict enough to avoid accidental peaks
+    price_prom = 0.5   # price units
+    rsi_prom   = 2.0   # RSI points
+    width      = 1
+    distance   = 3
+
+    # ----- Bonus sanity checks: verify the pivots SciPy actually sees -----
+    pmin, _ = find_peaks(-price.values, prominence=price_prom, width=width, distance=distance)
+    rmin, _ = find_peaks(-rsi.values,   prominence=rsi_prom,   width=width, distance=distance)
+    print("SANITY pmin:", pmin, "rmin:", rmin)
+    assert 8 in pmin and 19 in pmin,  f"Expected price minima at [8,19]; got {pmin.tolist()}"
+    assert 8 in rmin and 19 in rmin,  f"Expected RSI minima at [8,19]; got {rmin.tolist()}"
+
+    # Confirm LL (price) and HL (RSI)
+    assert price.iat[19] < price.iat[8], f"Price not LL: {price.iat[8]:.4f} vs {price.iat[19]:.4f}"
+    assert rsi.iat[19]   > rsi.iat[8],   f"RSI not HL:  {rsi.iat[8]:.2f} vs {rsi.iat[19]:.2f}"
+
+    # Pairing budget: use observed deltas to avoid alignment failures
+    first_delta  = abs(8 - 8)
+    second_delta = abs(19 - 19)
+    max_lag = max(3, int(max(first_delta, second_delta) + 1))
+    print(f"SANITY Δs: first={first_delta}, second={second_delta}, chosen max_lag={max_lag}")
+
+    # ----- Run detector (hidden disabled; we only care about regular-bullish) -----
+    divs = find_divergences(
+        prices=price,
+        rsi=rsi,
+        rsi_period=14,  # irrelevant when RSI supplied
+        price_prominence=price_prom,
+        rsi_prominence=rsi_prom,
+        price_width=width,
+        rsi_width=width,
+        distance=distance,
+        max_lag=max_lag,
+        include_hidden=False,
+    )
+
+    kinds = set(divs["kind"]) if not divs.empty else set()
+    assert "regular_bullish" in kinds, f"No regular_bullish found; divs=\n{divs}"
+
 
 def test_hidden_bearish_max_example():
     # PRICE: first top higher than second (LH)
