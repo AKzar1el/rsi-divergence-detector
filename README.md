@@ -307,20 +307,6 @@ PRs welcome!
 
 ---
 
-## Contributing
-
-* Keep public contracts stable; add/adjust tests when behavior changes.
-* Maintain stateless, explicit‑parameter functions (no hidden globals).
-* Run `pytest` locally before pushing.
-
----
-
-## License
-
-MIT — do what you like, include the license.
-
----
-
 ## References
 
 * **RSI (Wilder)** and smoothing background — StockCharts “RSI” notes; TC2000 help; Wikipedia overview.
