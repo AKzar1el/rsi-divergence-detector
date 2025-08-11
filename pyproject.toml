@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "rsi-divergence-detector"
-version = "0.1.4"
+version = "0.1.5"
 description = "A tool to detect RSI divergences in price data."
 authors = ["Tomi"]
 license = "MIT"
@@ -24,15 +24,16 @@ packages = [{include = "rsi_divergence"}]
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.14"
-pandas = "^2.0.0"
-numpy = [
-  { version = ">=1.23,<2", python = ">=3.9,<3.12" },
-  { version = ">=1.26,<2", python = ">=3.12,<3.14" }
-]
-scipy = [
-  { version = ">=1.11.2,<2", python = ">=3.9,<3.12" },
-  { version = ">=1.12,<2",   python = ">=3.12,<3.14" }
-]
+
+# Remove the <3 pin; start at 2.2.2 (first generally compatible with NumPy 2.0; 2.2.3 adds Py 3.13 support)
+pandas = ">=2.2.2"
+
+# Allow NumPy 1.26+ (adds Python 3.12 support and permits NumPy 2.x)
+numpy = ">=1.26"
+
+# Ensure SciPy won’t block NumPy 2.x environments
+scipy = ">=1.13"
+
 typer = {extras = ["all"], version = "^0.9.0"}
 
 [tool.poetry.group.dev.dependencies]
