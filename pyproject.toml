@@ -42,7 +42,7 @@ typer = { extras = ["all"], version = "^0.9.0" }
 pytest = "^8"
 hypothesis = "^6.88.0"
 mypy = "^1.5.0"
-black = "^23.9.0"
+black = "^24.3.0"
 flake8 = "^6.1.0"
 # Optional for your plotting demo scripts (not imported by the library):
 # mplfinance = "^0.12"
