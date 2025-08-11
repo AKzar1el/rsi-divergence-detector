@@ -2,10 +2,8 @@
 name = "rsi-divergence-detector"
 version = "0.1.0"
 description = "A tool to detect RSI divergences in price data."
-authors = [
-    {name = "Tomi Šeregi", email = "tomi.seregi99@gmail.com"}
-]
-license = {file = "LICENSE"}
+authors = ["Tomi Šeregi"]
+license = "BSD-3-Clause"
 readme = "README.md"
 repository = "https://github.com/AKzar1el/rsi_divergence_detector"
 keywords = ["rsi", "divergence", "finance", "trading", "technical-analysis"]
