@@ -1,0 +1,4 @@
+# file: c:\Users\Tomi\Desktop\lol\rsi_divergence_detector\rsi_divergence\core.py
+# hypothesis_version: 6.137.1
+
+[0.0, 0.005, 0.5, 1.0, 5.0, 100.0, '<', '>', 'Divergence', 'DivergenceParams', 'calculate_rsi', 'find_divergences', 'float64', 'hidden_bearish', 'hidden_bullish', 'regular_bearish', 'regular_bullish']
