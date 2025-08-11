@@ -31,7 +31,6 @@ It uses **Wilder‑style RSI**, **robust peak finding** via SciPy, and **determi
 * [Versioning / Compatibility](#versioning--compatibility)
 * [Limitations & Notes](#limitations--notes)
 * [Roadmap](#roadmap)
-* [Contributing](#contributing)
 * [License](#license)
 * [References](#references)
 * [SEO Keywords](#seo-keywords)
