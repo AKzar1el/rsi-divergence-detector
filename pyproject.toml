@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "rsi-divergence-detector"
-version = "0.1.5"
+version = "0.1.6"
 description = "A tool to detect RSI divergences in price data."
 authors = ["Tomi"]
 license = "MIT"
