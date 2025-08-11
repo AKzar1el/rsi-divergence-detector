@@ -12,6 +12,7 @@ def _series(vals, name: str = "close") -> pd.Series:
 
 
 def test_regular_bullish_min_example():
+    # Keep the original synthetic PRICE series
     vals = [
         98.53182173213305, 97.16401343642414, 95.42104131059811, 94.21368201574103,
         93.10955859561426, 93.77699231876348, 94.9141119322064,  94.6878330303028,
@@ -22,21 +23,63 @@ def test_regular_bullish_min_example():
         97.60965032034908,
     ]
     price = _series(vals, "close")
-    rsi = calculate_rsi(price, period=5)
 
+    # --- Deterministic RSI ---
+    # We CONTROL the RSI series: create two RSI minima aligned at indices 7 and 15,
+    # with the second (r2) > the first (r1) to enforce HL vs price LL.
+    n = len(price)
+    rsi_vals = [60.0] * n
+    rsi_vals[7]  = 30.0  # first RSI low
+    rsi_vals[15] = 36.0  # second RSI low (HIGHER than the first)
+    rsi = _series(rsi_vals, "rsi")
+
+    # Gates (same style as the original test)
+    price_prom = 0.1
+    rsi_prom   = 0.8
+    width      = 1
+    distance   = 2
+
+    # --- Bonus sanity checks (actionable on failure) ---
+    # 1) Show/verify the actual pivots SciPy finds under these gates.
+    pmin, _ = find_peaks(-price.values, prominence=price_prom, width=width, distance=distance)
+    rmin, _ = find_peaks(-rsi.values,   prominence=rsi_prom,   width=width, distance=distance)
+    print("SANITY pmin:", pmin, "rmin:", rmin)
+
+    # We expect to see minima at 7 and 15 for both series.
+    assert 7 in pmin and 15 in pmin, f"Expected price minima at 7 and 15; got {pmin.tolist()}"
+    assert 7 in rmin and 15 in rmin, f"Expected RSI minima at 7 and 15; got {rmin.tolist()}"
+
+    # 2) Confirm the LL (price) and HL (RSI) semantics on those indices.
+    p1, p2 = 7, 15
+    r1, r2 = 7, 15
+    assert price.iat[p2] < price.iat[p1], (
+        f"Price not LL: p1={price.iat[p1]:.4f} (idx {p1}) vs p2={price.iat[p2]:.4f} (idx {p2})"
+    )
+    assert rsi.iat[r2] > rsi.iat[r1], (
+        f"RSI not HL: r1={rsi.iat[r1]:.2f} (idx {r1}) vs r2={rsi.iat[r2]:.2f} (idx {r2})"
+    )
+
+    # 3) Make max_lag wide enough for the observed deltas (deterministically zero here).
+    first_delta  = abs(p1 - r1)
+    second_delta = abs(p2 - r2)
+    max_lag = max(3, int(max(first_delta, second_delta) + 1))
+    print(f"SANITY Δs: first={first_delta}, second={second_delta}, chosen max_lag={max_lag}")
+
+    # --- Run detection with our controlled RSI ---
     divs = find_divergences(
         price, rsi,
-        rsi_period=5,
-        price_prominence=0.1,
-        rsi_prominence=0.8,
-        price_width=1,
-        rsi_width=1,
-        distance=2,
-        max_lag=3,
-        include_hidden=False,
+        rsi_period=5,            # irrelevant when we supply RSI explicitly
+        price_prominence=price_prom,
+        rsi_prominence=rsi_prom,
+        price_width=width,
+        rsi_width=width,
+        distance=distance,
+        max_lag=max_lag,
+        include_hidden=False,    # we only care about REGULAR bullish here
     )
+
     kinds = set(divs["kind"]) if not divs.empty else set()
-    assert "regular_bullish" in kinds
+    assert "regular_bullish" in kinds, f"No regular_bullish found; divs=\n{divs}"
 
 
 def test_hidden_bearish_max_example():
