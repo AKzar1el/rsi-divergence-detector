@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "rsi-divergence-detector"
-version = "0.1.8"  # bump for the dependency change
+version = "0.1.9"
 description = "A tool to detect RSI divergences in price data."
 authors = ["Tomi"]
 license = "MIT"
@@ -44,7 +44,6 @@ hypothesis = "^6.88.0"
 mypy = "^1.5.0"
 black = "^23.9.0"
 flake8 = "^6.1.0"
-sphinx = "^7.2.0"
 # Optional for your plotting demo scripts (not imported by the library):
 # mplfinance = "^0.12"
 

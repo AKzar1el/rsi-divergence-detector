@@ -332,4 +332,4 @@ PRs welcome!
 
 ## SEO Keywords
 
-RSI divergence detector, RSI hidden divergence, Wilder RSI Python, RSI Wilder smoothing, RSI divergence Python library, SciPy find\_peaks RSI, RSI divergence CLI, regular vs hidden divergence, price oscillator divergence, RSI 30/70 heuristic, pandas RSI, quantitative trading divergence, Python technical analysis.
+RSI divergence detector, RSI hidden divergence, Wilder RSI Python, RSI Wilder smoothing, RSI divergence Python library, SciPy find_peaks RSI, RSI divergence CLI, regular vs hidden divergence, price oscillator divergence, RSI 30/70 heuristic, pandas RSI, quantitative trading divergence, Python technical analysis.
