@@ -1,130 +1,91 @@
-from __future__ import annotations
-from dataclasses import dataclass, asdict
-from typing import List, Optional, Tuple
 import numpy as np
 import pandas as pd
-from scipy.signal import find_peaks  # robust peak finder (prominence/width/distance)
+from dataclasses import dataclass, asdict
+from typing import List, Optional, Tuple
+from scipy.signal import find_peaks
 
-# --- RSI (Wilder-like via EWM) ---
-def calculate_rsi(prices: pd.Series, period: int = 14) -> pd.Series:
+# ... keep calculate_rsi and _find_pivots as-is ...
+
+def _nearest_monotonic(right: np.ndarray, target: int, max_lag: int, last_taken: Optional[int]) -> Optional[int]:
     """
-    Wilder-style RSI using exponential smoothing with alpha=1/period and adjust=False.
-    Leaves initial NaNs for warmup; caller can choose how to handle them.
+    Pick the nearest index in `right` to `target` within ±max_lag bars,
+    but enforce monotonically increasing time by requiring right[k] > last_taken.
+    Returns the POSITION k in `right` or None.
     """
-    prices = pd.Series(prices, dtype="float64")
-    delta = prices.diff()
-    gain = delta.clip(lower=0.0)
-    loss = -delta.clip(upper=0.0)
-
-    alpha = 1.0 / period
-    avg_gain = gain.ewm(alpha=alpha, adjust=False, min_periods=period).mean()
-    avg_loss = loss.ewm(alpha=alpha, adjust=False, min_periods=period).mean()
-    rs = avg_gain / avg_loss.replace(0.0, np.nan)
-    rsi = 100.0 - (100.0 / (1.0 + rs))
-    return rsi
-    # Pandas EWM behavior & Wilder smoothing α documented in pandas/RSI refs.  :contentReference[oaicite:1]{index=1}
-
-
-def _find_pivots(
-    series: pd.Series,
-    prominence: float,
-    width: int,
-    distance: int,
-) -> Tuple[np.ndarray, np.ndarray]:
-    """Return (minima_idx, maxima_idx) using SciPy's find_peaks with robust controls."""
-    y = series.values.astype("float64", copy=False)
-    maxima, _ = find_peaks(y, prominence=prominence, width=width, distance=distance)
-    minima, _ = find_peaks(-y, prominence=prominence, width=width, distance=distance)
-    return minima, maxima
-    # Prominence/width/distance are the core quality gates for peaks. :contentReference[oaicite:2]{index=2}
-
-
-def _pair_nearest(left: np.ndarray, right: np.ndarray, max_lag: int) -> List[Tuple[int, int]]:
-    """Greedy nearest-neighbor pairing within +/- max_lag bars."""
-    pairs: List[Tuple[int, int]] = []
-    j = 0
-    for i, li in enumerate(left):
-        while j < len(right) and right[j] < li - max_lag:
-            j += 1
-        candidates = []
-        for k in (j - 1, j, j + 1):
-            if 0 <= k < len(right):
-                r = right[k]
-                if abs(r - li) <= max_lag:
-                    candidates.append((abs(r - li), k))
-        if candidates:
-            _, kbest = min(candidates, key=lambda t: t[0])
-            pairs.append((i, kbest))
-    return pairs
-
-
-@dataclass(frozen=True)
-class Divergence:
-    kind: str  # "regular_bullish" | "regular_bearish" | "hidden_bullish" | "hidden_bearish"
-    p1_idx: pd.Timestamp
-    p1_price: float
-    p2_idx: pd.Timestamp
-    p2_price: float
-    r1_idx: pd.Timestamp
-    r1_val: float
-    r2_idx: pd.Timestamp
-    r2_val: float
+    k = int(np.searchsorted(right, target))
+    best = None
+    for cand in (k-1, k, k+1):
+        if 0 <= cand < len(right):
+            t = right[cand]
+            if last_taken is not None and t <= last_taken:
+                continue
+            if abs(t - target) <= max_lag:
+                dist = abs(t - target)
+                if best is None or dist < best[0]:
+                    best = (dist, cand)
+    return None if best is None else best[1]
 
 
 def find_divergences(
     prices: pd.Series,
     rsi: pd.Series,
     *,
-    rsi_period: int = 14,               # NEW: to compute adaptive defaults
+    rsi_period: int = 14,
     price_prominence: Optional[float] = None,
     rsi_prominence: Optional[float] = None,
     price_width: Optional[int] = None,
     rsi_width: Optional[int] = None,
-    distance: Optional[int] = None,     # NEW: pass to find_peaks
+    distance: Optional[int] = None,
     max_lag: int = 3,
     include_hidden: bool = True,
+    allow_equal: bool = True,   # NEW: treat ties as valid
 ) -> pd.DataFrame:
     """
-    Detect regular and (optionally) hidden divergences with windowed pivot pairing.
-
-    Returns a DataFrame with:
-    ['kind','p1_idx','p1_price','p2_idx','p2_price','r1_idx','r1_val','r2_idx','r2_val']
+    Detect regular and (optionally) hidden divergences by pairing *consecutive*
+    price pivots with *nearest-in-time* RSI pivots (monotonic).
     """
     prices = pd.Series(prices, dtype="float64")
     rsi = pd.Series(rsi, dtype="float64").reindex(prices.index)
 
-    # -------- Adaptive defaults --------
-    # Price prominence ~ half a volatility unit (scale-invariant, then back to price scale)
+    # --- Adaptive defaults (unchanged) ---
     if price_prominence is None:
         vol = prices.pct_change().rolling(rsi_period).std().iloc[-1]
-        # guard against NaN or zero in tiny samples
-        vol = float(vol) if np.isfinite(vol) and vol > 0 else 0.005  # ~0.5% fallback
+        vol = float(vol) if np.isfinite(vol) and vol > 0 else 0.005
         price_prominence = 0.5 * vol * float(prices.iloc[-1])
-
     if rsi_prominence is None:
-        rsi_prominence = 5.0  # RSI points
-
+        rsi_prominence = 5.0
     if price_width is None:
         price_width = 2
-
     if rsi_width is None:
         rsi_width = 2
-
     if distance is None:
         distance = max(1, rsi_period // 2)
 
-    # -------- Pivot detection --------
+    # --- Find pivots ---
     p_min, p_max = _find_pivots(prices, price_prominence, price_width, distance)
     r_min, r_max = _find_pivots(rsi,     rsi_prominence,   rsi_width, distance)
 
     out: List[Divergence] = []
 
-    # Regular Bullish: price LL, RSI HL
-    mb = _pair_nearest(p_min, r_min, max_lag)
-    for (i_li, i_ri), (j_li, j_ri) in zip(mb[:-1], mb[1:]):
-        p1, p2 = p_min[i_li], p_min[j_li]
-        r1, r2 = r_min[i_ri], r_min[j_ri]
-        if prices.iat[p2] < prices.iat[p1] and rsi.iat[r2] > rsi.iat[r1]:
+    def cmp(a, b, op: str) -> bool:
+        if allow_equal:
+            return (a <= b) if op == "<" else (a >= b)
+        return (a < b) if op == "<" else (a > b)
+
+    # ---------- Regular Bullish: price LL & RSI HL ----------
+    last_r = None
+    for i in range(len(p_min) - 1):
+        p1, p2 = p_min[i], p_min[i + 1]
+        k1 = _nearest_monotonic(r_min, p1, max_lag, last_r)
+        if k1 is None:
+            continue
+        k2 = _nearest_monotonic(r_min, p2, max_lag, k1)
+        if k2 is None:
+            continue
+        r1, r2 = r_min[k1], r_min[k2]
+        last_r = k2
+
+        if cmp(prices.iat[p2], prices.iat[p1], "<") and cmp(rsi.iat[r2], rsi.iat[r1], ">"):
             out.append(Divergence(
                 "regular_bullish",
                 prices.index[p1], float(prices.iat[p1]),
@@ -133,12 +94,20 @@ def find_divergences(
                 rsi.index[r2], float(rsi.iat[r2]),
             ))
 
-    # Regular Bearish: price HH, RSI LH
-    mb = _pair_nearest(p_max, r_max, max_lag)
-    for (i_li, i_ri), (j_li, j_ri) in zip(mb[:-1], mb[1:]):
-        p1, p2 = p_max[i_li], p_max[j_li]
-        r1, r2 = r_max[i_ri], r_max[j_ri]
-        if prices.iat[p2] > prices.iat[p1] and rsi.iat[r2] < rsi.iat[r1]:
+    # ---------- Regular Bearish: price HH & RSI LH ----------
+    last_r = None
+    for i in range(len(p_max) - 1):
+        p1, p2 = p_max[i], p_max[i + 1]
+        k1 = _nearest_monotonic(r_max, p1, max_lag, last_r)
+        if k1 is None:
+            continue
+        k2 = _nearest_monotonic(r_max, p2, max_lag, k1)
+        if k2 is None:
+            continue
+        r1, r2 = r_max[k1], r_max[k2]
+        last_r = k2
+
+        if cmp(prices.iat[p2], prices.iat[p1], ">") and cmp(rsi.iat[r2], rsi.iat[r1], "<"):
             out.append(Divergence(
                 "regular_bearish",
                 prices.index[p1], float(prices.iat[p1]),
@@ -148,12 +117,20 @@ def find_divergences(
             ))
 
     if include_hidden:
-        # Hidden Bullish: price HL, RSI LL
-        mb = _pair_nearest(p_min, r_min, max_lag)
-        for (i_li, i_ri), (j_li, j_ri) in zip(mb[:-1], mb[1:]):
-            p1, p2 = p_min[i_li], p_min[j_li]
-            r1, r2 = r_min[i_ri], r_min[j_ri]
-            if prices.iat[p2] > prices.iat[p1] and rsi.iat[r2] < rsi.iat[r1]:
+        # ---------- Hidden Bullish: price HL & RSI LL ----------
+        last_r = None
+        for i in range(len(p_min) - 1):
+            p1, p2 = p_min[i], p_min[i + 1]
+            k1 = _nearest_monotonic(r_min, p1, max_lag, last_r)
+            if k1 is None:
+                continue
+            k2 = _nearest_monotonic(r_min, p2, max_lag, k1)
+            if k2 is None:
+                continue
+            r1, r2 = r_min[k1], r_min[k2]
+            last_r = k2
+
+            if cmp(prices.iat[p2], prices.iat[p1], ">") and cmp(rsi.iat[r2], rsi.iat[r1], "<"):
                 out.append(Divergence(
                     "hidden_bullish",
                     prices.index[p1], float(prices.iat[p1]),
@@ -162,12 +139,20 @@ def find_divergences(
                     rsi.index[r2], float(rsi.iat[r2]),
                 ))
 
-        # Hidden Bearish: price LH, RSI HH
-        mb = _pair_nearest(p_max, r_max, max_lag)
-        for (i_li, i_ri), (j_li, j_ri) in zip(mb[:-1], mb[1:]):
-            p1, p2 = p_max[i_li], p_max[j_li]
-            r1, r2 = r_max[i_ri], r_max[j_ri]
-            if prices.iat[p2] < prices.iat[p1] and rsi.iat[r2] > rsi.iat[r1]:
+        # ---------- Hidden Bearish: price LH & RSI HH ----------
+        last_r = None
+        for i in range(len(p_max) - 1):
+            p1, p2 = p_max[i], p_max[i + 1]
+            k1 = _nearest_monotonic(r_max, p1, max_lag, last_r)
+            if k1 is None:
+                continue
+            k2 = _nearest_monotonic(r_max, p2, max_lag, k1)
+            if k2 is None:
+                continue
+            r1, r2 = r_max[k1], r_max[k2]
+            last_r = k2
+
+            if cmp(prices.iat[p2], prices.iat[p1], "<") and cmp(rsi.iat[r2], rsi.iat[r1], ">"):
                 out.append(Divergence(
                     "hidden_bearish",
                     prices.index[p1], float(prices.iat[p1]),
